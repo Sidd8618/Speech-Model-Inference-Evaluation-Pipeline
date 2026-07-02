@@ -20,24 +20,6 @@ the paper-summary component (Part 1).
 5. Computes WER, CER, average latency, and sample counts.
 6. Writes `results/metrics.json` and a human-readable `results/report.md`.
 
-## Project structure
-
-```
-.
-├── README.md
-├── requirements.txt
-├── run.py                       # single entry point
-├── research/
-│   └── wav2vec2_summary.md      # Part 1: paper summary
-├── src/
-│   ├── data_loader.py           # loads HF dataset, resamples to 16kHz
-│   ├── model_loader.py          # loads HF model + processor
-│   ├── inference.py             # runs + times model inference
-│   ├── evaluate.py              # WER / CER via jiwer
-│   └── utils.py                 # text normalization, dataset field helpers
-└── results/                     # generated: predictions.csv, metrics.json, report.md
-```
-
 ## Setup
 
 ```bash
