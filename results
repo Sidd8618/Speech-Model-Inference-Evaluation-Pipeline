@@ -1,0 +1,4 @@
+This directory is populated by `python run.py`:
+  - predictions.csv
+  - metrics.json
+  - report.md
