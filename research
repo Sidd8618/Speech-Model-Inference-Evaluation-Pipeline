@@ -1,0 +1,100 @@
+# Paper Summary: wav2vec 2.0 — A Framework for Self-Supervised Learning of Speech Representations
+
+**Authors:** Baevski, Zhou, Mohamed, Auli (Facebook AI, 2020)
+**Model used in this project:** `facebook/wav2vec2-base-960h` (fine-tuned on 960h LibriSpeech)
+
+## 1. What problem does it solve?
+
+Building an accurate automatic speech recognition (ASR) system traditionally required
+large amounts of *transcribed* audio — thousands of hours of speech paired with text.
+Transcribed data is expensive and scarce for most of the world's languages, while raw,
+*unlabeled* audio is comparatively abundant. wav2vec 2.0 addresses this gap: it learns
+powerful general-purpose speech representations from raw audio waveforms with **no
+labels at all**, and then needs only a small amount of transcribed data (as little as
+10 minutes, in the paper's most extreme experiment) to fine-tune a competitive ASR
+system. The core problem, then, is *label-efficient speech recognition* — getting good
+ASR performance while drastically reducing the need for annotated speech.
+
+## 2. How does the architecture work?
+
+wav2vec 2.0 has three main components trained in two stages:
+
+1. **Feature encoder** — a stack of temporal convolutional layers that takes the raw
+   16kHz waveform and produces a sequence of latent speech representations at roughly
+   20ms resolution. This removes the need for hand-engineered features like MFCCs.
+2. **Contextualized encoder (Transformer)** — the latent representations are fed into
+   a multi-layer Transformer that builds contextualized representations using
+   information from the entire utterance (via self-attention), similar to BERT for
+   text.
+3. **Quantization module** — in parallel, the raw latent features are also discretized
+   into a finite set of "codebook" entries via product quantization. These quantized
+   targets are what the model is pretrained to predict.
+
+**Pretraining (self-supervised):** Spans of the latent feature sequence are masked
+(analogous to masked-language-modeling in BERT), and the Transformer must identify the
+correct quantized representation for each masked timestep from a set of distractors,
+using a contrastive loss. This forces the model to learn rich contextual and phonetic
+structure purely from the audio signal itself.
+
+**Fine-tuning (supervised):** A linear layer is added on top of the pretrained
+Transformer and the whole model is fine-tuned with a Connectionist Temporal
+Classification (CTC) loss on transcribed speech, mapping frame-level outputs directly
+to characters/sub-words without requiring explicit audio-text alignment.
+
+The `-base` variant used here has 12 Transformer layers and ~95M parameters; a `-large`
+variant with 24 layers is also released.
+
+## 3. Why is it better than previous approaches?
+
+Prior speech recognition pipelines relied heavily on either (a) fully supervised
+acoustic models trained end-to-end on large labeled corpora, or (b) earlier
+self-supervised methods (e.g. CPC, APC) that learned representations at a coarser
+granularity or with weaker contextualization. wav2vec 2.0 improved on these by:
+
+- **Jointly learning representations and discrete units end-to-end**, instead of
+  learning representations and doing quantization/clustering as separate steps (the
+  approach later HuBERT would use a two-stage version of).
+- **Using a Transformer over the full utterance** rather than only local context,
+  giving it much richer contextual understanding than earlier convolution-only or
+  RNN-based self-supervised approaches.
+- **Achieving state-of-the-art results with drastically less labeled data.** On
+  LibriSpeech, the paper reports that with only 10 minutes of labeled data plus
+  pretraining on 53k hours of unlabeled audio, the model reaches WERs competitive with
+  systems that used 100x more labeled data just a couple of years earlier — and with
+  the full 960h labeled set, it matched or beat the best supervised systems of the
+  time.
+
+## 4. What datasets were used?
+
+- **Pretraining (unlabeled audio):** LibriSpeech's 960-hour unlabeled audio, and
+  separately LibriVox (LV-60k), a much larger ~53,200-hour unlabeled audio corpus, used
+  to test how far self-supervised pretraining scales.
+- **Fine-tuning (labeled audio, various low-resource subsets):** LibriSpeech's
+  train-clean-100, and small "Libri-light" limited-resource splits of 10 minutes, 1
+  hour, 10 hours, and 100 hours, to measure performance as a function of labeled-data
+  quantity.
+- **Evaluation:** Standard LibriSpeech `test-clean` and `test-other` splits, reporting
+  WER, both with and without an external language model.
+
+The model used in this project, `facebook/wav2vec2-base-960h`, was pretrained and then
+fully fine-tuned on the complete 960-hour LibriSpeech labeled set.
+
+## 5. What are its limitations?
+
+- **English/LibriSpeech-centric evaluation.** Most reported results are on read,
+  relatively clean English audiobook speech; performance on noisy, accented, or
+  multilingual speech is less thoroughly validated in the base paper (this was later
+  addressed by XLSR and related multilingual follow-ups).
+- **CTC's conditional-independence assumption.** Because output tokens are predicted
+  independently per frame (before an optional external language model is applied), the
+  model can produce phonetically plausible but linguistically implausible outputs
+  without LM rescoring — visible in this project's evaluation as substitution-type
+  errors (e.g. homophone confusions).
+- **Pretraining cost.** Self-supervised pretraining on tens of thousands of hours of
+  audio is computationally expensive, requiring large multi-GPU/TPU clusters not
+  accessible to most practitioners — though this cost is a one-time cost passed on to
+  everyone who reuses the public checkpoint, which is precisely why Hugging Face
+  hosting these pretrained weights is so valuable.
+- **Fixed-length windows / no built-in punctuation or casing.** The CTC output
+  vocabulary here is upper-case letters plus a few symbols, so the model does not
+  produce punctuation or true-case text, unlike encoder-decoder models such as Whisper.
